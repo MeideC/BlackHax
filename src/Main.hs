@@ -15,10 +15,12 @@ data CardValue = Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | 
 -- Define the Card value consisting of Suit and CardValue
 data Card = Card Suit CardValue deriving (Show)
 
--- Create a deck of cards
-allCards :: [Card]
-allCards = [Card x y | x <- [Spade .. Diamond], y <- [Two .. Ace]]
+type Deck = [Card]
+type Hand = [Card]
 
+-- Create a deck of cards
+allCards :: StdGen -> Deck
+allCards g = fst (shuffle' [Card x y | x <- [Spade .. Diamond], y <- [Two .. Ace]] g)
 
 -- LUL no idea xD
 shuffle' :: [a] -> StdGen -> ([a],StdGen)
@@ -44,17 +46,42 @@ shuffle' xs gen = runST (do
 
 -- Creates a tuplet with the given cards in fts and remaining cards in snd.
 -- Use it to deal cards.
-takeCards :: [Card] -> Int -> ([Card], [Card])
+takeCards :: Deck -> Int -> (Hand, Deck)
 takeCards cardList n = splitAt n cardList
 
-initDeal :: [Card] -> ([Card], [Card], [Card])
+
+-- init hands to player and computer (= 2 cards to each one)
+-- which means calling takeCards 2 twice and returning triplet with
+-- 1. player's 2 cards
+-- 2. computer's 2 cards
+-- 3. rest of the deck
+initDeal :: Deck -> (Hand, Hand, Deck)
+initDeal ws = head [([x], [y], [xs]) | x <- take 2 ws, y <- take 2 ws, xs <- ws]
+
+
+-- asd
+--callTakeCardsTwice :: (deck -> Int -> tuplet) -> deck -> Int -> tuplet
+
+main_loop = do
+  g <- newStdGen
+
+  putStrLn "hello pls enter 1"
+  command <- getLine
+  case command of
+    "hit" ->
+      print $ takeCards (allCards g) 1
+    "init" ->
+      print $ initDeal (allCards g)
+
+  main_loop
 
 
 main = do
 
-  g <- newStdGen
 
-  print $ takeCards (fst (shuffle' allCards g)) 51
+
+  --print $ takeCards (fst (shuffle' allCards g)) 51
+  main_loop
 
 
 

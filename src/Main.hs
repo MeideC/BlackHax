@@ -5,7 +5,7 @@ import Data.Array.ST
 import Control.Monad
 import Control.Monad.ST
 import Data.STRef
---import Rng
+import Control.Monad.State
 
 
 -- Create our own Types for Suit and CardValue
@@ -15,97 +15,104 @@ data CardValue = Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | 
 -- Define the Card value consisting of Suit and CardValue
 data Card = Card Suit CardValue deriving (Show)
 
-type Deck = [Card]
+data Deck = Deck { deck :: [Card] } deriving (Show)
 type Hand = [Card]
 
+data Game = Game {
+    gDeck :: Deck,
+    playerHand :: Hand,
+    dealerHand :: Hand,
+    message :: String } deriving (Show)
+
+type DeckState a = State Deck a
+type GameState a = StateT Game a
+
 -- Create a deck of cards
-allCards :: StdGen -> Deck
-allCards g = fst (shuffle' [Card x y | x <- [Spade .. Diamond], y <- [Two .. Ace]] g)
+allCards :: Deck
+allCards = Deck { deck = [Card x y | x <- [Spade .. Diamond], y <- [Two .. Ace]] }
 
--- LUL no idea xD
-shuffle' :: [a] -> StdGen -> ([a],StdGen)
-shuffle' xs gen = runST (do
-        g <- newSTRef gen
-        let randomRST lohi = do
-              (a,s') <- liftM (randomR lohi) (readSTRef g)
-              writeSTRef g s'
-              return a
-        ar <- newArray n xs
-        xs' <- forM [1..n] $ \i -> do
-                j <- randomRST (i,n)
-                vi <- readArray ar i
-                vj <- readArray ar j
-                writeArray ar j vi
-                return vj
-        gen' <- readSTRef g
-        return (xs',gen'))
-  where
-    n = length xs
-    newArray :: Int -> [a] -> ST s (STArray s Int a)
-    newArray n xs =  newListArray (1,n) xs
+-- Draws a single card from the Deck
+-- if run with runState, returns a tuple (Card, DeckState)
+drawCard :: DeckState Card
+drawCard = do
+    state <- get
+    -- get the first card and last
+    let card    = head (deck state)
+        newDeck = tail (deck state)
+    -- save the reduced deck
+    put state { deck = newDeck }
+    return card
 
--- Creates a tuplet with the given cards in fts and remaining cards in snd.
--- Use it to deal cards.
-takeCards :: Deck -> Int -> (Hand, Deck)
-takeCards cardList n = splitAt n cardList
+-- Get the deck from the state
+-- TODO make the suffling
+makeDeck :: DeckState Deck
+makeDeck = do
+    state <- get
+    return state
+
+-- Create a new Game
+makeGame :: Game
+makeGame = Game 
+    -- identify the to-be deck with d'
+    { gDeck = d',
+    playerHand = pHand,
+    dealerHand = dHand,
+    message = "message" }
+    -- make the Deck appear in the state with makeDeck
+    -- and then use the 'deal' to return a ((Hand, Hand), DeckState)
+    where d = execState makeDeck $ allCards
+          ((pHand, dHand), d') = runState initDeal $ d 
+
+initDeal :: DeckState (Hand, Hand)
+initDeal = do
+    -- draw 2 for each player, put them into a list and return them in a Tuple
+    player <- drawCard
+    dealer <- drawCard
+    player' <- drawCard
+    dealer' <- drawCard
+    let p = [player, player']
+        d = [dealer, dealer']
+    return (p, d)
+
+-- legacy
+gameOver :: GameState IO ()
+gameOver = do
+    curr <- get
+    put curr { message = "over" }
+    let playerH = playerHand curr
+        dealerH = dealerHand curr
+    liftIO . putStrLn $ "ur hand: " ++ (show playerH)
 
 
--- init hands to player and computer (= 2 cards to each one)
--- which means calling takeCards 2 twice and returning triplet with
--- 1. player's 2 cards
--- 2. computer's 2 cards
--- 3. rest of the deck
-initDeal :: Deck -> (Hand, Hand, Deck)
-initDeal ws = head [([x], [y], [xs]) | x <- take 2 ws, y <- take 2 ws, xs <- ws]
+handlePlayer :: GameState IO ()
+handlePlayer = do
+    curr <- get
+    input <- liftIO $ do
+        let pHand = playerHand curr
+            dHand = dealerHand curr
+        putStrLn $ "ur hadn: " ++ (show pHand)
+        putStrLn $ "there hadn: " ++ (show dHand)
+        putStrLn $ "u do?! (y/nu)"
+        input <- getLine
+        return input
+
+    when (input == "y") $ do
+       let (newCard, newDeck) = runState drawCard $ gDeck curr     
+       put curr { gDeck = newDeck, playerHand = newCard : playerHand curr }
+
+       newState <- get
+       let newHand = playerHand newState
+       liftIO . putStrLn $ "new haend: " ++ (show newHand)
 
 
--- asd
---callTakeCardsTwice :: (deck -> Int -> tuplet) -> deck -> Int -> tuplet
-
-main_loop = do
-  g <- newStdGen
-
-  putStrLn "hello pls enter 1"
-  command <- getLine
-  case command of
-    "hit" ->
-      print $ takeCards (allCards g) 1
-    "init" ->
-      print $ initDeal (allCards g)
-
-  main_loop
+runGame :: GameState IO ()
+runGame = do
+    handlePlayer
+    runGame
 
 
+-- remember the fugin T
+main :: IO ()
 main = do
+    evalStateT runGame $ makeGame
 
-
-
-  --print $ takeCards (fst (shuffle' allCards g)) 51
-  main_loop
-
-
-
-
-
-  -- print $ takeCards 5 g
-
-
-
-
-
-  --takeXCards :: (Card a) => x -> [a]
-  --takeXCards n
-  --  | n <= 0 = []
-  --  | n = 1 = let a = fst $ randomR (0, 51) $ newStdGen
-  --  | otherwise = takeXCards n - 1
-
-  {-
-  takeCard :: StdGen -> (Card, StdGen)
-  takeCard g = (allCards !! (fst (randomR (0, length allCards) g)), snd (randomR (0, length allCards) g))h
-  -}
-
-  {-
-  takeCards :: Int -> StdGen -> [(Card, StdGen)]
-  takeCards 1 g = takeCard g : []
-  takeCards n g = takeCards (n - 1) (snd ((takeCards (n - 1) g) !! (n - 1) )) ++ takeCards 1 g
-  -}

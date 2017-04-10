@@ -27,9 +27,9 @@ data Game = Game {
 type DeckState a = State Deck a
 type GameState a = StateT Game a
 
--- Create a deck of cards
-allCards :: Deck
-allCards = Deck { deck = [Card x y | x <- [Spade .. Diamond], y <- [Two .. Ace]] }
+-- Create a deck of cards and shuffle them
+allCards :: StdGen -> Deck
+allCards g = Deck { deck = fst(shuffle' [Card x y | x <- [Spade .. Diamond], y <- [Two .. Ace]] g)}
 
 -- Draws a single card from the Deck
 -- if run with runState, returns a tuple (Card, DeckState)
@@ -44,15 +44,14 @@ drawCard = do
     return card
 
 -- Get the deck from the state
--- TODO make the suffling
 makeDeck :: DeckState Deck
 makeDeck = do
     state <- get
     return state
 
 -- Create a new Game
-makeGame :: Game
-makeGame = Game 
+makeGame :: StdGen -> Game
+makeGame g = Game 
     -- identify the to-be deck with d'
     { gDeck = d',
     playerHand = pHand,
@@ -60,7 +59,7 @@ makeGame = Game
     message = "message" }
     -- make the Deck appear in the state with makeDeck
     -- and then use the 'deal' to return a ((Hand, Hand), DeckState)
-    where d = execState makeDeck $ allCards
+    where d = execState makeDeck $ allCards g
           ((pHand, dHand), d') = runState initDeal $ d 
 
 initDeal :: DeckState (Hand, Hand)
@@ -90,21 +89,64 @@ handlePlayer = do
     input <- liftIO $ do
         let pHand = playerHand curr
             dHand = dealerHand curr
-        putStrLn $ "ur hadn: " ++ (show pHand)
-        putStrLn $ "there hadn: " ++ (show dHand)
-        putStrLn $ "u do?! (y/nu)"
+        putStrLn $ "Your current hand is: " ++ (show pHand)
+        putStrLn $ "which values to: " ++ show (handValue pHand)
+        putStrLn $ ""
+        putStrLn $ "Dealer's hand: " ++ (show dHand)
+        putStrLn $ "which values to: " ++ show (handValue dHand)
+        putStrLn $ ""
+        putStrLn $ "What will you do (hit/stay)"
+        putStrLn $ ""
         input <- getLine
         return input
 
-    when (input == "y") $ do
-       let (newCard, newDeck) = runState drawCard $ gDeck curr     
-       put curr { gDeck = newDeck, playerHand = newCard : playerHand curr }
+    when (input == "stay") $ do 
+        handleDealer
 
-       newState <- get
-       let newHand = playerHand newState
-       liftIO . putStrLn $ "new haend: " ++ (show newHand)
+    when (input == "hit") $ do
+        let (newCard, newDeck) = runState drawCard $ gDeck curr     
+        put curr { gDeck = newDeck, playerHand = newCard : playerHand curr }
+
+        newState <- get
+        let newHand = playerHand newState
+        handlePlayer
+
+-- dealer lifts card to the dealerHand
+handleDealer :: GameState IO ()
+handleDealer = do
+    currentState <- get
+    let (newCard, newDeck) = runState drawCard $ gDeck currentState
+    put currentState { gDeck = newDeck, dealerHand = newCard : dealerHand currentState }
+
+-- Calculate complete value of a hand, return Int
+handValue :: Hand -> Int
+handValue [] = 0
+handValue (h:hs) = value h + handValue hs
+
+-- evaluate the CardValue of a single Card
+value :: Card -> Int
+value (Card _ x) = intValue x
+
+-- Map the CardValue's to Int
+intValue :: CardValue -> Int
+intValue Two = 2
+intValue Three = 3
+intValue Four = 4
+intValue Five = 5
+intValue Six = 6
+intValue Seven = 7
+intValue Eight = 8
+intValue Nine = 9
+intValue Ten = 10
+intValue Jack = 10
+intValue Queen = 10
+intValue King = 10
+intValue Ace = 11
 
 
+-- TODO smart dealer
+-- check winners after dealers turn
+-- if player go over 21, you lose
 runGame :: GameState IO ()
 runGame = do
     handlePlayer
@@ -114,5 +156,30 @@ runGame = do
 -- remember the fugin T
 main :: IO ()
 main = do
-    evalStateT runGame $ makeGame
+    g <- newStdGen
+    evalStateT runGame $ makeGame g
 
+
+
+
+-- LUL no idea xD
+shuffle' :: [a] -> StdGen -> ([a],StdGen)
+shuffle' xs gen = runST (do
+        g <- newSTRef gen
+        let randomRST lohi = do
+              (a,s') <- liftM (randomR lohi) (readSTRef g)
+              writeSTRef g s'
+              return a
+        ar <- newArray n xs
+        xs' <- forM [1..n] $ \i -> do
+                j <- randomRST (i,n)
+                vi <- readArray ar i
+                vj <- readArray ar j
+                writeArray ar j vi
+                return vj
+        gen' <- readSTRef g
+        return (xs',gen'))
+  where
+    n = length xs
+    newArray :: Int -> [a] -> ST s (STArray s Int a)
+    newArray n xs =  newListArray (1,n) xs

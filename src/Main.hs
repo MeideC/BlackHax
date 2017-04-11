@@ -80,7 +80,7 @@ gameOver = do
     put curr { message = "over" }
     let playerH = playerHand curr
         dealerH = dealerHand curr
-    liftIO . putStrLn $ "ur hand: " ++ (show playerH)
+    liftIO . putStrLn $ "game over, ur hand:" ++ (show playerH)
 
 
 handlePlayer :: GameState IO ()
@@ -142,6 +142,12 @@ intValue Jack = 10
 intValue Queen = 10
 intValue King = 10
 intValue Ace = 11
+
+
+isOver21 :: Hand -> Bool
+isOver21 h = do
+    let hValue = handValue h
+    hValue > 21
 
 
 -- TODO smart dealer

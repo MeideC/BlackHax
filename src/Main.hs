@@ -209,9 +209,9 @@ checkWin = do
         else if dValue > 21
             then handleEnd "Win"
             -- none of them over, who bigger?!
-            else if pValue > dValue
-                then handleEnd "Win"
-                else handleEnd "Lose"
+            else if pValue <= dValue
+                then handleEnd "Lose"
+                else handleEnd "Win"
 
 -- Just tells if the player lost or won
 -- Input either "Win" or "Lose"
